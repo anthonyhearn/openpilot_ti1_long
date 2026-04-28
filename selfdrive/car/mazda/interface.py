@@ -9,6 +9,9 @@ from openpilot.selfdrive.car.mazda.values import CAR, LKAS_LIMITS, MazdaFlags, G
 from openpilot.selfdrive.car import create_button_events, get_safety_config
 from openpilot.selfdrive.car.interfaces import CarInterfaceBase, TorqueFromLateralAccelCallbackType, LateralAccelFromTorqueCallbackType
 from openpilot.common.params import Params
+from opendbc.car.mazda.longitudinal import enter_radar_programming_session
+
+MAZDA_LONG_SAFETY_PARAM = 1
 
 ButtonType = car.CarState.ButtonEvent.Type
 FrogPilotButtonType = custom.FrogPilotCarState.ButtonEvent.Type
@@ -69,6 +72,16 @@ class CarInterface(CarInterfaceBase):
     ret.radarUnavailable = True
     ret.dashcamOnly = False
     ret.openpilotLongitudinalControl = True
+    ret.alphaLongitudinalAvailable = candidate == CAR.MAZDA_CX5_2022
+    ret.openpilotLongitudinalControl = alpha_long and ret.alphaLongitudinalAvailable
+    # Mazda-long still engages on the stock ACC-active transition even though
+    # we suppress the radar-owned CRZ_CTRL path and synthesize replacement
+    # longitudinal messages.
+    ret.pcmCruise = True
+    ret.safetyConfigs = [get_safety_config(structs.CarParams.SafetyModel.mazda,
+                                           MAZDA_LONG_SAFETY_PARAM if ret.openpilotLongitudinalControl else None)]
+    ret.radarUnavailable = ret.openpilotLongitudinalControl or Bus.radar not in DBC[candidate]
+    
     p = Params()
     if p.get_bool("ManualTransmission"):
       ret.flags |= MazdaFlags.MANUAL_TRANSMISSION.value
@@ -133,6 +146,17 @@ class CarInterface(CarInterfaceBase):
 
     ret.centerToFront = ret.wheelbase * 0.41
 
+    if ret.openpilotLongitudinalControl:
+      ret.startingState = True
+      ret.startAccel = 1.2
+      ret.vEgoStarting = 0.15
+      ret.vEgoStopping = 0.5
+      ret.longitudinalActuatorDelay = 0.36
+      ret.longitudinalTuning.kpBP = [0., 5., 20.]
+      ret.longitudinalTuning.kpV = [1.2, 1.0, 0.8]
+      ret.longitudinalTuning.kiBP = [0., 5., 20.]
+      ret.longitudinalTuning.kiV = [0.18, 0.12, 0.08]
+
     return ret
 
   # returns a car.CarState
@@ -159,5 +183,13 @@ class CarInterface(CarInterfaceBase):
       #  events.add(EventName.steerTempUnavailable) # torqueInterceptorTemporaryWarning
 
     ret.events = events.to_msg()
+
+      @staticmethod
+  def init(CP, CP_SP, can_recv, can_send):
+    if CP.openpilotLongitudinalControl:
+      enter_radar_programming_session(can_recv, can_send)
+    @staticmethod
+  def deinit(CP, can_recv, can_send):
+    if CP.openpilotLongitudinalControl:
 
     return ret, fp_ret
