@@ -2,8 +2,10 @@
 /********** GEN1 msgs **********/
 #define MAZDA_LKAS          0x243
 #define MAZDA_LKAS_HUD      0x440
+#define MAZDA_CRZ_INFO      0x21bU
 #define MAZDA_CRZ_CTRL      0x21c
 #define MAZDA_CRZ_BTNS      0x09d
+#define MAZDA_RADAR_UDS     0x764U
 #define MAZDA_STEER_TORQUE  0x240
 #define MAZDA_ENGINE_DATA   0x202
 #define MAZDA_PEDALS        0x165
@@ -38,6 +40,11 @@
 #define MAZDA_MAIN 0
 #define MAZDA_AUX  1
 #define MAZDA_CAM  2
+
+enum {
+  MAZDA_PARAM_LONGITUDINAL = 1,
+};
+static bool mazda_longitudinal = false;
 
 // param flag masks
 const int FLAG_GEN1 = 1;
@@ -143,6 +150,27 @@ static void mazda_rx_hook(const CANPacket_t *to_push) {
         int speed = (GET_BYTE(to_push, 2) << 8) | GET_BYTE(to_push, 3);
         vehicle_moving = speed > 10; // moving when speed > 0.1 kph
       }
+
+    if (msg->addr == MAZDA_PEDALS) {
+      bool brake = (msg->data[0] & 0x10U);
+      if (mazda_longitudinal) {
+        // Radar suppression removes the stock CRZ_CTRL frame, so derive Mazda's
+        // "main on" state from PEDALS instead. ACC_OFF means MRCC is armed but
+        // not actively controlling, and ACC_ACTIVE means stock ACC is engaged.
+        bool cruise_engaged = GET_BIT(msg, 3U);
+        bool acc_armed = GET_BIT(msg, 2U) || cruise_engaged;
+        acc_main_on = acc_armed;
+
+        // Only feed PEDALS into pcm_cruise_check when the ACC state is actually
+        // meaningful. Brake-only samples can arrive with both ACC bits low while
+        // the driver is holding the pedal; treating those as a stock ACC-off edge
+        // drops controls before the normal brake-edge logic runs.
+        if (acc_armed || cruise_engaged_prev || (!brake && !brake_pressed_prev)) {
+          pcm_cruise_check(cruise_engaged);
+        }
+      }
+      brake_pressed = brake;
+    }
 
       if (addr == MAZDA_STEER_TORQUE && !torque_interceptor) {
         int torque_driver_new = GET_BYTE(to_push, 0) - 127U;
@@ -275,6 +303,39 @@ static bool mazda_tx_hook(const CANPacket_t *to_send) {
     }
   }
 
+     if (mazda_longitudinal && (msg->addr == MAZDA_CRZ_INFO)) {
+      // Keep Panda's Mazda-long safety window aligned with the software clip in
+      // opendbc/car/mazda/longitudinal.py. If this is tighter than the sender,
+      // Panda will silently drop 0x21b frames once ACCEL_CMD crosses the
+      // safety threshold, which looks like an unexplained set-speed unlatch.
+      const LongitudinalLimits MAZDA_LONG_LIMITS = {
+        .max_accel = 2000,
+        .min_accel = -2000,
+        .inactive_accel = 0,
+      };
+
+      int desired_accel = ((((int)msg->data[2] & 0x3U) << 11) | (((int)msg->data[3]) << 3) | (((int)msg->data[4]) >> 5)) - 4096;
+      if (longitudinal_accel_checks(desired_accel, MAZDA_LONG_LIMITS)) {
+        tx = false;
+      }
+    }
+
+    if (mazda_longitudinal && (msg->addr == MAZDA_CRZ_CTRL)) {
+      bool cruise_active = GET_BIT(msg, 3U);
+      if (!controls_allowed && cruise_active) {
+        tx = false;
+      }
+    }
+
+    if (mazda_longitudinal && (msg->addr == MAZDA_RADAR_UDS)) {
+      bool tester_present = (msg->data[0] == 0x02U) && (msg->data[1] == 0x3EU) && (msg->data[2] == 0x80U);
+      bool session_control = (msg->data[0] == 0x02U) && (msg->data[1] == 0x10U) &&
+                             ((msg->data[2] == 0x01U) || (msg->data[2] == 0x02U));
+      if (!tester_present && !session_control) {
+        tx = false;
+      }
+    }
+
   return tx;
 }
 
@@ -307,6 +368,19 @@ static int mazda_fwd_hook(int bus, int addr) {
 }
 
 static safety_config mazda_init(uint16_t param) {
+  static const CanMsg MAZDA_TX_MSGS[] = {
+    {MAZDA_LKAS, 0, 8, .check_relay = true},
+    {MAZDA_CRZ_BTNS, 0, 8, .check_relay = false},
+    {MAZDA_LKAS_HUD, 0, 8, .check_relay = true},
+  };
+  static const CanMsg MAZDA_LONG_TX_MSGS[] = {
+    {MAZDA_LKAS, 0, 8, .check_relay = true},
+    {MAZDA_CRZ_BTNS, 0, 8, .check_relay = false},
+    {MAZDA_LKAS_HUD, 0, 8, .check_relay = true},
+    {MAZDA_CRZ_INFO, 0, 8, .check_relay = false},
+    {MAZDA_CRZ_CTRL, 0, 8, .check_relay = false},
+    {MAZDA_RADAR_UDS, 0, 8, .check_relay = false},
+  };
   safety_config ret = BUILD_SAFETY_CFG(mazda_rx_checks, MAZDA_TX_MSGS);
   gen1 = GET_FLAG(param, FLAG_GEN1);
   gen2 = GET_FLAG(param, FLAG_GEN2);
@@ -336,7 +410,8 @@ static safety_config mazda_init(uint16_t param) {
     ret = BUILD_SAFETY_CFG(mazda_2023_rx_checks, MAZDA_2019_TX_MSGS);
   }
 
-  return ret;
+  return mazda_longitudinal ? BUILD_SAFETY_CFG(mazda_long_rx_checks, MAZDA_LONG_TX_MSGS) :
+                              BUILD_SAFETY_CFG(mazda_rx_checks, MAZDA_TX_MSGS);
 }
 
 const safety_hooks mazda_hooks = {
