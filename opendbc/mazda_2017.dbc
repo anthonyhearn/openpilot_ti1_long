@@ -514,6 +514,8 @@ BO_ 535 CURVE_CTRS: 8 XXX
 BO_ 540 CRZ_CTRL: 8 XXX
  SG_ NEW_SIGNAL_2 : 2|11@0+ (1,0) [0|1] "" XXX
  SG_ CRZ_ACTIVE : 3|1@0+ (1,0) [0|1] "" XXX
+ SG_ MSG_1_INV_COPY : 8|1@0+ (1,0) [0|7] "" XXX
+ SG_ MSG_1 : 0|1@0+ (1,0) [0|3] "" XXX
  SG_ NEW_SIGNAL_1 : 7|4@0+ (1,0) [0|15] "" XXX
  SG_ NEW_SIGNAL_8 : 16|1@0+ (1,0) [0|1] "" XXX
  SG_ CRZ_AVAILABLE : 17|1@0+ (1,0) [0|255] "" XXX
