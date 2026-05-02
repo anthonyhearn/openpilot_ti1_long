@@ -1,4 +1,4 @@
-#include "safety_declarations.h"
+#include "declarations.h"
 
 void default_rx_hook(const CANPacket_t *to_push) {
   UNUSED(to_push);
