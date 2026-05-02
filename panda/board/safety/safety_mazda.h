@@ -1,4 +1,4 @@
-#include "openpilot_ti1_long/panda/board/safety/declarations.h"
+#include "panda/board/safety/declarations.h"
 
 // CAN msgs we care about
 /********** GEN1 msgs **********/
