@@ -15,7 +15,7 @@ static bool nooutput_tx_hook(const CANPacket_t *to_send) {
   UNUSED(to_send);
   return false;
 }
-
+//from int to bool
 static bool default_fwd_hook(int bus_num, int addr) {
   UNUSED(bus_num);
   UNUSED(addr);
