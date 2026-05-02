@@ -1,3 +1,5 @@
+#include "opendbc/safety/declarations.h"
+
 // CAN msgs we care about
 /********** GEN1 msgs **********/
 #define MAZDA_LKAS          0x243
