@@ -1,4 +1,4 @@
-#include "board/safety/declarations.h"
+#include "safety/declarations.h"
 
 // CAN msgs we care about
 /********** GEN1 msgs **********/
