@@ -4,11 +4,14 @@ import numpy as np
 
 from cereal import car, custom
 from panda import Panda
+from opendbc.car.mazda.longitudinal import enter_radar_programming_session
 from openpilot.common.conversions import Conversions as CV
 from openpilot.selfdrive.car.mazda.values import CAR, LKAS_LIMITS, MazdaFlags, GEN1, GEN2, GEN3
 from openpilot.selfdrive.car import create_button_events, get_safety_config
 from openpilot.selfdrive.car.interfaces import CarInterfaceBase, TorqueFromLateralAccelCallbackType, LateralAccelFromTorqueCallbackType
 from openpilot.common.params import Params
+
+MAZDA_LONG_SAFETY_PARAM = 1
 
 ButtonType = car.CarState.ButtonEvent.Type
 FrogPilotButtonType = custom.FrogPilotCarState.ButtonEvent.Type
@@ -67,11 +70,15 @@ class CarInterface(CarInterfaceBase):
   @staticmethod
   def _get_params(ret, candidate, fingerprint, car_fw, experimental_long, docs, frogpilot_toggles):
     ret.carName = "mazda"
-    ret.safetyConfigs = [get_safety_config(car.CarParams.SafetyModel.mazda)]
-    ret.radarUnavailable = True
     ret.dashcamOnly = False
     ret.openpilotLongitudinalControl = True
     ret.pcmCruise = True
+    ret.alphaLongitudinalAvailable = candidate == CAR.MAZDA_CX5_2022
+    ret.openpilotLongitudinalControl = alpha_long and ret.alphaLongitudinalAvailable
+    ret.pcmCruise = not ret.openpilotLongitudinalControl
+    ret.safetyConfigs = [get_safety_config(structs.CarParams.SafetyModel.mazda,
+                                           MAZDA_LONG_SAFETY_PARAM if ret.openpilotLongitudinalControl else None)]
+    ret.radarUnavailable = ret.openpilotLongitudinalControl or Bus.radar not in DBC[candidate]
     
     p = Params()
     if p.get_bool("ManualTransmission"):
@@ -136,6 +143,13 @@ class CarInterface(CarInterfaceBase):
       ret.minSteerSpeed = LKAS_LIMITS.DISABLE_SPEED * CV.KPH_TO_MS
 
     ret.centerToFront = ret.wheelbase * 0.41
+
+    return ret
+
+    @staticmethod
+  def _get_params_sp(stock_cp: structs.CarParams, ret: structs.CarParamsSP, candidate, fingerprint: dict[int, dict[int, int]],
+                     car_fw: list[structs.CarParams.CarFw], alpha_long: bool, is_release_sp: bool, docs: bool) -> structs.CarParamsSP:
+    ret.intelligentCruiseButtonManagementAvailable = True
 
     return ret
 
