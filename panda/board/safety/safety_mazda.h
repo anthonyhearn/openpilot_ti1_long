@@ -2,7 +2,7 @@
 /********** GEN1 msgs **********/
 #define MAZDA_LKAS          0x243
 #define MAZDA_LKAS_HUD      0x440
-#define MAZDA_CRZ_INFO      0x21bU
+//#define MAZDA_CRZ_INFO      0x21bU
 #define MAZDA_CRZ_CTRL      0x21c
 #define MAZDA_CRZ_BTNS      0x09d
 #define MAZDA_RADAR_UDS     0x764U
