@@ -1,3 +1,8 @@
+#include "selfdrive/params.h"
+#include "params.h"
+#include "panda/params.h"
+#include "panda/board/utils.h"
+
 void default_rx_hook(const CANPacket_t *to_push) {
   UNUSED(to_push);
 }
