@@ -33,6 +33,14 @@ class CarState(CarStateBase):
     self.cancel_button = 0
     self.main_button = 0
 
+     def update_button_enable(self, buttonEvents: list[structs.CarState.ButtonEvent]):
+    if not self.CP.pcmCruise:
+      for b in buttonEvents:
+        if (b.type == ButtonType.accelCruise and b.pressed) or \
+           (b.type == ButtonType.decelCruise and not b.pressed):
+          return True
+    return False
+
     self.ti_ramp_down = False
     self.ti_version = 1
     self.ti_state = TI_STATE.RUN
@@ -139,7 +147,7 @@ class CarState(CarStateBase):
       ret.cruiseState.enabled = cp.vl["PEDALS"]["ACC_ACTIVE"] == 1
       ret.cruiseState.available = cp.vl["PEDALS"]["CRZ_AVAILABLE"] == 1
     else:
-      ret.cruiseState.available = cp.vl["CRZ_CTRL"]["CRZ_AVAILABLE"] == 1
+      ret.cruiseState.available = True if self.CP.openpilotLongitudinalControl else cp.vl["CRZ_CTRL"]["CRZ_AVAILABLE"] == 1
       ret.cruiseState.enabled = cp.vl["CRZ_CTRL"]["CRZ_ACTIVE"] == 1
 
     # Check if LKAS is disabled due to lack of driver torque when all other states indicate
